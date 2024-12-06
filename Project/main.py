@@ -61,9 +61,14 @@ if __name__ == "__main__":
         
         # Check if listening was successful
         if user_response.success and user_response.message:
-
+            # Get user current emotion string
+            # user_current_emotion = 
             print("User said:", user_response.message)
+            # Input: {'user_emotion': str, 'user_text': str}
+            # Outpur: {'furhat_emotion': str, 'furhat_text': str}
+
             response = model.generate_content(user_response.message)
+        
             print("Furhat said:", response.text)
             furhat.say(text=response.text, blocking=True)
             
