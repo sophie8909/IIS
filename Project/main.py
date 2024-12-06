@@ -4,7 +4,15 @@ from genai_api_key import GENAI_API_KEY
 from feat import Detector
 from feat.pretrained import AU_LANDMARK_MAP
 import random
+import time
+import threading
 
+def detect_face_emotion():
+    pass
+
+def furhat_listen():
+    user_response = furhat.listen() 
+    return user_response
 
 
 if __name__ == "__main__":
@@ -16,7 +24,7 @@ if __name__ == "__main__":
     genai.configure(api_key=GENAI_API_KEY)
     # Prompt to GEMINI model presonality
     # read the text from prompt/person1.txt
-    with open("prompt/person1.txt", "r") as file:
+    with open("prompt/ENTP.txt", "r") as file:
         instruction = file.read()
     model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=instruction)
     response = model.generate_content("hi")
@@ -53,19 +61,25 @@ if __name__ == "__main__":
         "Shake"
     ]
 
-
+    # 執行緒設置
+    face_thread = threading.Thread(target=detect_face_emotion)
+    listen_thread = threading.Thread(target=furhat_listen)
 
     # Listen to the user's response
-    user_response = furhat.listen()  
+    start_time = time.time()
+    furhat_listen.start()
+
     while user_response.success:
-        
+        end_time = time.time()
         # Check if listening was successful
         if user_response.success and user_response.message:
             # Get user current emotion string
+
             # user_current_emotion = 
             print("User said:", user_response.message)
             # Input: {'user_emotion': str, 'user_text': str}
-            # Outpur: {'furhat_emotion': str, 'furhat_text': str}
+            # Outpur: {'furhat_emotion': str, 'furhat_text': str, 'personality': str}
+            # personality: 'ENTP', 'ESFJ', 'INFP'
 
             response = model.generate_content(user_response.message)
         
@@ -75,6 +89,6 @@ if __name__ == "__main__":
         else:
             if user_response.message == "":
                 pass
-            furhat.say(text="Sorry, I cannot understand", blocking=True)
             print("Listening failed or no speech detected.")
+        start_time = time.time()
         user_response = furhat.listen()  
