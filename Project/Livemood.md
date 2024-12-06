@@ -34,6 +34,27 @@ The computational resources required for training models, potential environmenta
 
 The project will specialize in accurately detecting user emotions and integrating a trained Large Language Model (LLM) to ensure Furhat provides precise and meaningful conversational responses, thereby enhancing the interaction subsystem. 
 
+ Py-Feat detector 曾測臉部表情，結果跟人說得放到LLM  
+
+
+
+LLM input: 臉部情緒偵測的文字結果，user input text
+
+LLM structured output: gesture, output text for furhat json
+
+LLM prompt: 3 different personity with full background story, information security prompt
+
+model: Gemini 1.0 Pro, text natural language
+
+model: Gemini 1.5 flash
+
+- friendly 
+- ESFJ
+- ENTP
+- Infp
+
+
+
 ## Project Breakdown
 
 2024/11/27: Submit the proposal project specifications. 
