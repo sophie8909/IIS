@@ -35,10 +35,11 @@ predefined_gestures = [
 
 # Global variables
 user_emotion = "neutral"
+is_closed = False
 
 
 # Lock 
-lock = threading.Lock()
+# lock = threading.Lock()
 
 # parse response as {'furhat_emotion': str, 'furhat_text': str, 'personality': str}
 def parse_response(response):
@@ -55,47 +56,95 @@ def parse_response(response):
     response = json.loads(extracted_content)
     return response
 
-def temp_emotion_detect(frame):
-    print("Starting emotion detection...")
-    global user_emotion
-    detector = Detector(device="cuda")
-    cv2.namedWindow("Webcam Feed")
-    cap = cv2.VideoCapture(0)
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+def furhat_control():
+    with open("./Prompt/INFP.txt", "r", encoding="utf-8") as file:
+        INFP_instruction = file.read()
+    with open("./Prompt/ENTP.txt", "r", encoding="utf-8") as file:
+        ENTP_instruction = file.read()
+    with open("./Prompt/ESFJ.txt", "r", encoding="utf-8") as file:
+        ESFJ_instruction = file.read()
+    genai.configure(api_key=GENAI_API_KEY)
 
-        faces = detector.detect_faces(frame)
-        landmarks = detector.detect_landmarks(frame, faces)
-        emotions = detector.detect_emotions(frame, faces, landmarks)
+    global furhat, INFP_model, ENTP_model, ESFJ_model
+    INFP_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=INFP_instruction)
+    ENTP_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ENTP_instruction)
+    ESFJ_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ESFJ_instruction)
 
-        faces = faces[0]
-        landmarks = landmarks[0]
-        emotions = emotions[0]
+    furhat = FurhatRemoteAPI("localhost")
+    
+    
+    voices = furhat.get_voices()
 
-        user_emotion = emotions.argmax(axis=1)
+    # Select a character for the virtual Furhat
+    furhat.set_face(character="AnimePink", mask="Anime")
+
+    # Set the voice of the robot
+    furhat.set_voice(name='Joanna')
+
+    current_model = random.choice([INFP_model, ENTP_model, ESFJ_model])
+    change_model = False
+
+    response = current_model.generate_content("the costumer is coming, introduce yourself")
+    response = parse_response(response)
+
+    # Have Furhat greet the user
+    furhat.say(text=response['furhat_text'], blocking=True)
+    furhat.gesture(name=response['furhat_emotion'])
 
 
-        # draw rectangles around the faces
-        for (face, top_emo) in zip(faces, user_emotion):
-            (x0, y0, x1, y1, p) = face
-            cv2.rectangle(frame, (int(x0), int(y0)), (int(x1), int(y1)), (255, 0, 0), 3)
-            cv2.putText(frame, FEAT_EMOTION_COLUMNS[top_emo], (int(x0), int(y0 - 10)), cv2.FONT_HERSHEY_PLAIN, 1.5, (255, 0, 0), 2)
+    user_response = furhat.listen()
+    global is_closed
+    while user_response.success and not is_closed:
+        # Check if listening was successful
+        if user_response.success and user_response.message:
+            # Get user current emotion string
 
+            # user_current_emotion = 
+            print("User said:", user_response.message)
             
-        cv2.imshow("Webcam Feed", frame)
-        key = cv2.waitKey(1)
-        if key == 27:
-            break
-    # 釋放資源
-    cap.release()
-    cv2.destroyAllWindows()
+            # Input: {'user_emotion': str, 'user_text': str}
+            # Outpur: {'furhat_emotion': str, 'furhat_text': str, 'personality': str}
+            # personality: 'ENTP', 'ESFJ', 'INFP'
+            global user_emotion
+            print("user_emotion:", user_emotion)
+            print('{{"user_emotion": {}, "user_text": {}}}'.format(user_emotion, user_response.message))
+            response = current_model.generate_content('{{"user_emotion": {}, "user_text": {}}}'.format(user_emotion, user_response.message))
+            response = parse_response(response)
+            
+            print("response:", response)
+
+            furhat_emotion = response['furhat_emotion']
+            furhat_text = response['furhat_text']
+            personality = response['personality']
+
+            furhat.say(text=furhat_text, blocking=False)
+            furhat.gesture(name=furhat_emotion)
+
+            if personality == 'INFP' and current_model != INFP_model:
+                change_model = True
+                current_model = INFP_model
+            elif personality == 'ENTP' and current_model != ENTP_model:
+                change_model = True
+                current_model = ENTP_model
+            elif personality == 'ESFJ' and current_model != ESFJ_model:
+                change_model = True
+                current_model = ESFJ_model
+            
+        else:
+            if user_response.message == "":
+                pass
+            print("Listening failed or no speech detected.")
+        if change_model:
+            current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
+            change_model = False
+            furhat.say(text=response.text, blocking=True)
+        user_response = furhat.listen()  
+
 
 def emotion_detect():
-    global user_emotion
+    global user_emotion, is_closed
     # 加載訓練好的模型
-    emotion_detect_model = load_model('/Users/chenchenghan/Downloads/emotion_detection_fer2013.h5') 
+    emotion_detect_model = load_model('./emotion_detection_fer2013.h5') 
 
     # 定義情緒標籤
     emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
@@ -132,20 +181,20 @@ def emotion_detect():
             # 使用模型進行預測
             emotion_predictions = emotion_detect_model.predict(face)
             max_index = np.argmax(emotion_predictions[0])  # 找到預測機率最高的類別
-            with lock:
-                user_emotion = emotion_labels[max_index]
-            
+            user_emotion = emotion_labels[max_index]
+        
 
-                # 在人臉邊框上方輸出情緒文字
-                cv2.putText(frame, user_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+            # 在人臉邊框上方輸出情緒文字
+            cv2.putText(frame, user_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
-                print(f"Detected emotion: {user_emotion}")
+            print(f"Detected emotion: {user_emotion}")
 
         # 顯示影像
         cv2.imshow('Emotion Detection', frame)
 
         # 按 'q' 鍵退出
         if cv2.waitKey(1) & 0xFF == ord('q'):
+            is_closed = True
             break
 
     # 釋放資源
@@ -155,101 +204,20 @@ def emotion_detect():
 
 def main():
     
-    with open("./Prompt/INFP.txt", "r", encoding="utf-8") as file:
-        INFP_instruction = file.read()
-    # with open("./Prompt/ENTP.txt", "r", encoding="utf-8") as file:
-    #     ENTP_instruction = file.read()
-    # with open("./Prompt/ESFJ.txt", "r", encoding="utf-8") as file:
-    #     ESFJ_instruction = file.read()
-    genai.configure(api_key=GENAI_API_KEY)
-
-    global furhat, INFP_model
-    # , ENTP_model, ESFJ_model
-    INFP_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=INFP_instruction)
-    # ENTP_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ENTP_instruction)
-    # ESFJ_model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=ESFJ_instruction)
-
-    furhat = FurhatRemoteAPI("localhost")
 
     print("Starting Furhat and emotion detection threads...")
 
     # 創建兩個 Thread
-    thread_emotion = threading.Thread(target=temp_emotion_detect)
+    thread_emotion = threading.Thread(target=emotion_detect)
+    thread_furhat = threading.Thread(target=furhat_control)
 
     # 啟動 Thread
     thread_emotion.start()
+    thread_furhat.start()
 
-    print("Starting Furhat control...")
     
-    
-    voices = furhat.get_voices()
-
-    # Select a character for the virtual Furhat
-    furhat.set_face(character="AnimePink", mask="Anime")
-
-    # Set the voice of the robot
-    furhat.set_voice(name='Joanna')
-
-    current_model = random.choice([INFP_model])
-    #  ENTP_model, ESFJ_model
-    change_model = False
-
-    response = current_model.generate_content("the costumer is coming")
-    response = parse_response(response)
-
-    # Have Furhat greet the user
-    furhat.say(text=response['furhat_text'], blocking=True)
-    furhat.gesture(name=response['furhat_emotion'])
-
-
-    user_response = furhat.listen()
-    while user_response.success:
-        # Check if listening was successful
-        if user_response.success and user_response.message:
-            # Get user current emotion string
-
-            # user_current_emotion = 
-            print("User said:", user_response.message)
-            
-            # Input: {'user_emotion': str, 'user_text': str}
-            # Outpur: {'furhat_emotion': str, 'furhat_text': str, 'personality': str}
-            # personality: 'ENTP', 'ESFJ', 'INFP'
-            with lock:
-                global user_emotion
-                print("user_emotion:", user_emotion)
-                print("{{'user_emotion': {}, 'user_text': {}}}".format(user_emotion, user_response.message))
-                response = current_model.generate_content("{{'user_emotion': {}, 'user_text': {}}}".format(user_emotion, user_response.message))
-            response = parse_response(response)
-            
-            print("response:", response)
-
-            furhat_emotion = response['furhat_emotion']
-            furhat_text = response['furhat_text']
-            personality = response['personality']
-
-            furhat.say(text=furhat_text, blocking=False)
-            furhat.gesture(name=furhat_emotion)
-
-            if personality == 'INFP' and current_model != INFP_model:
-                change_model = True
-                current_model = INFP_model
-            # elif personality == 'ENTP' and current_model != ENTP_model:
-            #     change_model = True
-            #     current_model = ENTP_model
-            # elif personality == 'ESFJ' and current_model != ESFJ_model:
-            #     change_model = True
-            #     current_model = ESFJ_model
-            
-        else:
-            if user_response.message == "":
-                pass
-            print("Listening failed or no speech detected.")
-        if change_model:
-            current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
-            change_model = False
-            furhat.say(text=response.text, blocking=True)
-        user_response = furhat.listen()  
-    
+    thread_emotion.join()
+    thread_furhat.join()
 
 
     
