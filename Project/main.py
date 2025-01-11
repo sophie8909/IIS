@@ -37,6 +37,7 @@ predefined_gestures = [
 user_emotion = "neutral"
 is_closed = False
 
+furhat, INFP_model, ENTP_model, ESFJ_model = None, None, None, None
 
 # Lock 
 # lock = threading.Lock()
@@ -54,7 +55,29 @@ def parse_response(response):
     corrected_json = extracted_content.replace("'", "\\'")
     
     response = json.loads(extracted_content)
-    return response
+    furhat_emotion = response['furhat_emotion']
+    furhat_text = response['furhat_text']
+    personality = response['personality']
+    return furhat_emotion, furhat_text, personality
+
+def furhat_response(response):
+    furhat_emotion, furhat_text, personality = parse_response(response)
+    return furhat_emotion, furhat_text, personality
+
+
+def furhat_setting(current_model):
+    global furhat, INFP_model, ENTP_model, ESFJ_model
+    if current_model == INFP_model:
+        furhat.set_face(character="Omar", mask="adult")
+        furhat.set_voice(name='Gregory-Neural')
+
+    elif current_model == ENTP_model:
+        furhat.set_face(character="Fedora", mask="adult")
+        furhat.set_voice(name='Ruth-Neural')
+
+    elif current_model == ESFJ_model:
+        furhat.set_face(character="Yumi", mask="adult")
+        furhat.set_voice(name='Joanna-Neural')
 
 def furhat_control():
     with open("./Prompt/INFP.txt", "r", encoding="utf-8") as file:
@@ -73,23 +96,20 @@ def furhat_control():
     furhat = FurhatRemoteAPI("localhost")
     
     
-    voices = furhat.get_voices()
 
-    # Select a character for the virtual Furhat
-    furhat.set_face(character="AnimePink", mask="Anime")
-
-    # Set the voice of the robot
-    furhat.set_voice(name='Joanna')
+    
 
     current_model = random.choice([INFP_model, ENTP_model, ESFJ_model])
     change_model = False
 
+    furhat_setting(current_model)
+
     response = current_model.generate_content("the costumer is coming, introduce yourself")
-    response = parse_response(response)
+    furhat_emotion, furhat_text, personality = parse_response(response)
 
     # Have Furhat greet the user
-    furhat.say(text=response['furhat_text'], blocking=True)
-    furhat.gesture(name=response['furhat_emotion'])
+    furhat.say(text=furhat_text, blocking=True)
+    furhat.gesture(name=furhat_emotion)
 
 
     user_response = furhat.listen()
@@ -109,15 +129,8 @@ def furhat_control():
             print("user_emotion:", user_emotion)
             print('{{"user_emotion": {}, "user_text": {}}}'.format(user_emotion, user_response.message))
             response = current_model.generate_content('{{"user_emotion": {}, "user_text": {}}}'.format(user_emotion, user_response.message))
-            response = parse_response(response)
-            
-            print("response:", response)
-
-            furhat_emotion = response['furhat_emotion']
-            furhat_text = response['furhat_text']
-            personality = response['personality']
-
-            furhat.say(text=furhat_text, blocking=False)
+            furhat_emotion, furhat_text, personality = parse_response(response)
+            furhat.say(text=furhat_text, blocking=True)
             furhat.gesture(name=furhat_emotion)
 
             if personality == 'INFP' and current_model != INFP_model:
@@ -135,15 +148,15 @@ def furhat_control():
                 pass
             print("Listening failed or no speech detected.")
         if change_model:
-            response = current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
-            response = parse_response(response)
-            print("response:", response)
-
-            furhat_emotion = response['furhat_emotion']
-            furhat_text = response['furhat_text']
-            personality = response['personality']
-            furhat.say(text=furhat_text, blocking=True)
             change_model = False
+            furhat_setting(current_model)
+            response = current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
+            furhat_emotion, furhat_text, personality = parse_response(response)
+            furhat.say(text=furhat_text, blocking=True)
+            furhat.gesture(name=furhat_emotion)
+            
+            
+
         user_response = furhat.listen()  
 
 
@@ -218,11 +231,11 @@ def main():
     thread_furhat = threading.Thread(target=furhat_control)
 
     # 啟動 Thread
-    # thread_emotion.start()
+    thread_emotion.start()
     thread_furhat.start()
 
     
-    # thread_emotion.join()
+    thread_emotion.join()
     thread_furhat.join()
 
 
