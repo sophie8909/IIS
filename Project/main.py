@@ -135,9 +135,15 @@ def furhat_control():
                 pass
             print("Listening failed or no speech detected.")
         if change_model:
-            current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
+            response = current_model.generate_content("Your colleague is coming to talk to you. Since the costumer wants to talk to you, you should be prepared.")
+            response = parse_response(response)
+            print("response:", response)
+
+            furhat_emotion = response['furhat_emotion']
+            furhat_text = response['furhat_text']
+            personality = response['personality']
+            furhat.say(text=furhat_text, blocking=True)
             change_model = False
-            furhat.say(text=response.text, blocking=True)
         user_response = furhat.listen()  
 
 
@@ -212,11 +218,11 @@ def main():
     thread_furhat = threading.Thread(target=furhat_control)
 
     # 啟動 Thread
-    thread_emotion.start()
+    # thread_emotion.start()
     thread_furhat.start()
 
     
-    thread_emotion.join()
+    # thread_emotion.join()
     thread_furhat.join()
 
 
