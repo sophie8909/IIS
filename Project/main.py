@@ -6,8 +6,6 @@ import time
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
-from feat import Detector
-from feat.utils import FEAT_EMOTION_COLUMNS
 import random
 import json
 import re
